@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iOS GPS Spoofer — Australia</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f13;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 16px 80px;
+    }
+
+    h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 4px; color: #f8fafc; }
+    .subtitle { font-size: 0.85rem; color: #64748b; margin-bottom: 32px; }
+
+    /* ── Status bar ── */
+    .status-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #1a1a24;
+      border: 1px solid #2d2d3d;
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #64748b;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .pill .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #334155;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+
+    .pill.ok       { color: #86efac; border-color: #166534; }
+    .pill.ok .dot  { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
+    .pill.bad      { color: #f87171; border-color: #7f1d1d; }
+    .pill.bad .dot { background: #ef4444; }
+    .pill.active   { color: #a5f3fc; border-color: #164e63; }
+    .pill.active .dot { background: #22d3ee; box-shadow: 0 0 6px #22d3ee88; }
+
+    /* ── Card ── */
+    .card {
+      background: #1a1a24;
+      border: 1px solid #2d2d3d;
+      border-radius: 16px;
+      padding: 32px;
+      width: 100%;
+      max-width: 520px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #94a3b8;
+      margin-bottom: 8px;
+    }
+
+    .input-row { display: flex; gap: 8px; margin-bottom: 8px; }
+
+    input[type="text"] {
+      flex: 1;
+      background: #0f0f18;
+      border: 1px solid #2d2d3d;
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #f1f5f9;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus { border-color: #6366f1; }
+
+    button {
+      background: #6366f1;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+      white-space: nowrap;
+    }
+    button:hover { background: #4f46e5; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Suggestions ── */
+    .suggestions {
+      background: #0f0f18;
+      border: 1px solid #2d2d3d;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .suggestion-item {
+      padding: 10px 14px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-bottom: 1px solid #1e1e2e;
+      transition: background 0.1s;
+    }
+    .suggestion-item:last-child { border-bottom: none; }
+    .suggestion-item:hover { background: #1e1e2e; }
+    .suggestion-item .suburb { font-weight: 500; }
+    .suggestion-item .state  { color: #64748b; font-size: 0.8rem; margin-left: 6px; }
+
+    .hidden { display: none !important; }
+
+    /* ── Result section ── */
+    .result-section { margin-top: 24px; border-top: 1px solid #2d2d3d; padding-top: 24px; }
+
+    .coords-display {
+      background: #0f0f18;
+      border: 1px solid #2d2d3d;
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .coords-values { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 1.05rem; color: #a5f3fc; }
+    .coords-label  { font-size: 0.75rem; color: #475569; margin-top: 3px; }
+
+    /* ── Big spoof button ── */
+    .spoof-actions {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .btn-spoof {
+      flex: 1;
+      padding: 14px;
+      font-size: 1rem;
+      border-radius: 12px;
+      background: #166534;
+      color: #86efac;
+    }
+    .btn-spoof:hover:not(:disabled) { background: #15803d; }
+    .btn-spoof.spoofing { background: #14532d; }
+
+    .btn-reset {
+      padding: 14px 18px;
+      border-radius: 12px;
+      background: #1e293b;
+      color: #94a3b8;
+      font-size: 0.9rem;
+    }
+    .btn-reset:hover:not(:disabled) { background: #2d3748; color: #e2e8f0; }
+
+    .spoof-status {
+      font-size: 0.82rem;
+      text-align: center;
+      padding: 8px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .spoof-status.success { background: #052e16; color: #86efac; }
+    .spoof-status.error   { background: #450a0a; color: #fca5a5; }
+
+    /* ── Methods ── */
+    details { margin-bottom: 8px; }
+    summary {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #475569;
+      cursor: pointer;
+      padding: 8px 0;
+      list-style: none;
+      user-select: none;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::before { content: '▶ '; font-size: 0.6rem; transition: transform 0.15s; }
+    details[open] summary::before { content: '▼ '; }
+
+    .methods { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+    .method {
+      background: #0f0f18;
+      border: 1px solid #2d2d3d;
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .method-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .method-title { font-size: 0.82rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94a3b8; }
+    .method-tag   { font-size: 0.7rem; background: #1e293b; color: #64748b; padding: 2px 8px; border-radius: 20px; }
+
+    .code-block {
+      background: #08080f;
+      border-radius: 7px;
+      padding: 10px 12px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.82rem;
+      color: #86efac;
+      word-break: break-all;
+    }
+    .action-row { display: flex; gap: 8px; margin-top: 10px; }
+    .action-btn { font-size: 0.78rem; padding: 7px 14px; border-radius: 7px; background: #1e293b; color: #94a3b8; }
+    .action-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .action-btn.primary { background: #312e81; color: #a5b4fc; }
+    .action-btn.primary:hover { background: #3730a3; }
+
+    /* ── Map ── */
+    .map-preview { width: 100%; border-radius: 10px; overflow: hidden; margin-bottom: 20px; border: 1px solid #2d2d3d; }
+    .map-preview iframe { width: 100%; height: 200px; border: none; display: block; }
+
+    /* ── Misc ── */
+    .error-msg { font-size: 0.85rem; color: #f87171; margin-top: 8px; }
+
+    .spinner {
+      display: inline-block; width: 13px; height: 13px;
+      border: 2px solid currentColor; border-top-color: transparent;
+      border-radius: 50%; animation: spin 0.7s linear infinite;
+      vertical-align: middle; margin-right: 5px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .server-hint {
+      margin-top: 24px;
+      padding: 14px 16px;
+      background: #0f0f18;
+      border: 1px solid #2d2d3d;
+      border-radius: 10px;
+      font-size: 0.82rem;
+      color: #64748b;
+      line-height: 1.6;
+    }
+    .server-hint code {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      background: #1e293b;
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: #a5b4fc;
+    }
+  </style>
+</head>
+<body>
+
+<h1>iOS GPS Spoofer</h1>
+<p class="subtitle">Search an Australian suburb and push the location straight to your iPhone</p>
+
+<!-- Status pills -->
+<div class="status-bar">
+  <div class="pill" id="pill-server">
+    <div class="dot"></div>
+    <span id="pill-server-text">Server: checking…</span>
+  </div>
+  <div class="pill" id="pill-device">
+    <div class="dot"></div>
+    <span id="pill-device-text">Device: —</span>
+  </div>
+  <div class="pill" id="pill-spoof">
+    <div class="dot"></div>
+    <span id="pill-spoof-text">Spoofing: idle</span>
+  </div>
+</div>
+
+<div class="card">
+
+  <!-- Search -->
+  <label for="suburb-input">Suburb or postcode</label>
+  <div class="input-row">
+    <input type="text" id="suburb-input"
+      placeholder="e.g. Bondi Beach, Fitzroy, 3065…"
+      autocomplete="off" spellcheck="false">
+    <button id="search-btn">Search</button>
+  </div>
+  <div id="error-msg" class="error-msg hidden"></div>
+  <div id="suggestions" class="suggestions hidden"></div>
+
+  <!-- Result -->
+  <div id="result-section" class="result-section hidden">
+
+    <label style="margin-bottom:12px">Map preview</label>
+    <div class="map-preview">
+      <iframe id="map-frame" title="Location map" loading="lazy"></iframe>
+    </div>
+
+    <label style="margin-bottom:8px">Coordinates</label>
+    <div class="coords-display">
+      <div>
+        <div class="coords-values" id="coords-text">—</div>
+        <div class="coords-label"  id="place-name">—</div>
+      </div>
+      <button class="action-btn" id="copy-coords-btn">Copy</button>
+    </div>
+
+    <!-- Primary action -->
+    <div class="spoof-actions">
+      <button class="btn-spoof" id="spoof-btn">Spoof Device</button>
+      <button class="btn-reset" id="reset-btn">Reset GPS</button>
+    </div>
+    <div id="spoof-msg" class="spoof-status hidden"></div>
+
+    <!-- Manual fallback (collapsed) -->
+    <details>
+      <summary>Manual commands &amp; GPX</summary>
+      <div class="methods">
+
+        <div class="method">
+          <div class="method-header">
+            <span class="method-title">pymobiledevice3</span>
+            <span class="method-tag">Mac / Linux / Windows</span>
+          </div>
+          <div class="code-block" id="cmd-pymobile"></div>
+          <div class="action-row">
+            <button class="action-btn" id="copy-pymobile-btn">Copy</button>
+          </div>
+        </div>
+
+        <div class="method">
+          <div class="method-header">
+            <span class="method-title">idevicesetlocation</span>
+            <span class="method-tag">libimobiledevice</span>
+          </div>
+          <div class="code-block" id="cmd-idevice"></div>
+          <div class="action-row">
+            <button class="action-btn" id="copy-idevice-btn">Copy</button>
+          </div>
+        </div>
+
+        <div class="method">
+          <div class="method-header">
+            <span class="method-title">GPX file</span>
+            <span class="method-tag">Xcode · iOS Simulator</span>
+          </div>
+          <div class="code-block" id="gpx-preview"></div>
+          <div class="action-row">
+            <button class="action-btn primary" id="download-gpx-btn">Download .gpx</button>
+            <button class="action-btn"         id="copy-gpx-btn">Copy XML</button>
+          </div>
+        </div>
+
+      </div>
+    </details>
+
+  </div><!-- /result-section -->
+
+  <!-- Server not running hint -->
+  <div id="server-hint" class="server-hint hidden">
+    <strong style="color:#94a3b8">Start the local server to enable one-click spoofing:</strong><br>
+    <code>python server.py</code><br><br>
+    The server wraps pymobiledevice3 and listens on <code>localhost:9876</code>.
+    Manual commands and GPX export always work without it.
+  </div>
+
+</div><!-- /card -->
+
+<script>
+  const API = 'http://127.0.0.1:9876';
+  let lat = null, lng = null, placeName = '';
+  let serverOnline = false, deviceConnected = false, spoofActive = false;
+  let debounceTimer = null;
+
+  // ── Status polling ─────────────────────────────────────────────────────────
+  async function pollStatus() {
+    try {
+      const r = await fetch(`${API}/status`, { signal: AbortSignal.timeout(3000) });
+      const d = await r.json();
+      serverOnline = true;
+      deviceConnected = d.connected;
+      setPill('server', 'ok', `Server: online`);
+      setPill('device', d.connected ? 'ok' : 'bad',
+        d.connected ? `Device: ${d.udid ? d.udid.slice(0,8)+'…' : 'connected'}` : 'Device: not found');
+      document.getElementById('server-hint').classList.add('hidden');
+    } catch {
+      serverOnline = false;
+      deviceConnected = false;
+      setPill('server', 'bad', 'Server: offline');
+      setPill('device', '',    'Device: —');
+      document.getElementById('server-hint').classList.remove('hidden');
+    }
+    updateSpoofBtn();
+  }
+
+  function setPill(id, cls, text) {
+    const pill = document.getElementById(`pill-${id}`);
+    pill.className = 'pill' + (cls ? ` ${cls}` : '');
+    document.getElementById(`pill-${id}-text`).textContent = text;
+  }
+
+  pollStatus();
+  setInterval(pollStatus, 4000);
+
+  function updateSpoofBtn() {
+    const btn = document.getElementById('spoof-btn');
+    if (!serverOnline) {
+      btn.disabled = true;
+      btn.textContent = 'Server offline';
+    } else if (!deviceConnected) {
+      btn.disabled = true;
+      btn.textContent = 'No device connected';
+    } else if (lat === null) {
+      btn.disabled = true;
+      btn.textContent = 'Spoof Device';
+    } else {
+      btn.disabled = false;
+      btn.textContent = spoofActive ? 'Update Location' : 'Spoof Device';
+    }
+  }
+
+  // ── Geocode via Nominatim ──────────────────────────────────────────────────
+  async function geocode(query) {
+    const url = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({
+      q: query + ', Australia',
+      format: 'json', limit: 6, countrycodes: 'au', addressdetails: 1,
+    });
+    const r = await fetch(url, {
+      headers: { 'Accept-Language': 'en', 'User-Agent': 'ios-gps-spoofer/1.0' }
+    });
+    return r.json();
+  }
+
+  function showSuggestions(results) {
+    const el = document.getElementById('suggestions');
+    el.innerHTML = '';
+    if (!results.length) { el.classList.add('hidden'); return; }
+    results.forEach(r => {
+      const div = document.createElement('div');
+      div.className = 'suggestion-item';
+      const suburb = r.address.suburb || r.address.town || r.address.city || r.address.village || r.name;
+      const state  = r.address.state || '';
+      div.innerHTML = `<span class="suburb">${suburb || r.display_name.split(',')[0]}</span><span class="state">${state}</span>`;
+      div.addEventListener('click', () => selectResult(r));
+      el.appendChild(div);
+    });
+    el.classList.remove('hidden');
+  }
+
+  function selectResult(r) {
+    lat = parseFloat(r.lat);
+    lng = parseFloat(r.lon);
+    const suburb = r.address.suburb || r.address.town || r.address.city || r.address.village || r.name;
+    const state  = r.address.state || '';
+    placeName = [suburb, state, 'Australia'].filter(Boolean).join(', ');
+    document.getElementById('suburb-input').value = placeName;
+    document.getElementById('suggestions').classList.add('hidden');
+    spoofActive = false;
+    setPill('spoof', '', 'Spoofing: idle');
+    renderResult();
+  }
+
+  function renderResult() {
+    const latF = lat.toFixed(6), lngF = lng.toFixed(6);
+    document.getElementById('coords-text').textContent = `${latF}, ${lngF}`;
+    document.getElementById('place-name').textContent  = placeName;
+    document.getElementById('map-frame').src =
+      `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.05},${lat-0.05},${lng+0.05},${lat+0.05}&layer=mapnik&marker=${lat},${lng}`;
+    document.getElementById('cmd-pymobile').textContent =
+      `python -m pymobiledevice3 developer dvt simulate-location set -- ${latF} ${lngF}`;
+    document.getElementById('cmd-idevice').textContent =
+      `idevicesetlocation ${latF} ${lngF}`;
+    document.getElementById('gpx-preview').textContent = buildGpx(latF, lngF, placeName);
+    document.getElementById('result-section').classList.remove('hidden');
+    document.getElementById('spoof-msg').classList.add('hidden');
+    updateSpoofBtn();
+  }
+
+  // ── Search ─────────────────────────────────────────────────────────────────
+  async function doSearch() {
+    const q = document.getElementById('suburb-input').value.trim();
+    if (!q) return;
+    const errEl  = document.getElementById('error-msg');
+    const searchBtn = document.getElementById('search-btn');
+    errEl.classList.add('hidden');
+    searchBtn.disabled = true;
+    searchBtn.innerHTML = '<span class="spinner"></span>Searching…';
+    try {
+      const results = await geocode(q);
+      if (!results.length) {
+        errEl.textContent = 'No Australian suburb found. Try a different name or postcode.';
+        errEl.classList.remove('hidden');
+        document.getElementById('suggestions').classList.add('hidden');
+        document.getElementById('result-section').classList.add('hidden');
+      } else if (results.length === 1) {
+        selectResult(results[0]);
+      } else {
+        showSuggestions(results);
+      }
+    } catch {
+      errEl.textContent = 'Search failed — check your internet connection.';
+      errEl.classList.remove('hidden');
+    } finally {
+      searchBtn.disabled = false;
+      searchBtn.textContent = 'Search';
+    }
+  }
+
+  document.getElementById('suburb-input').addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    const q = document.getElementById('suburb-input').value.trim();
+    if (q.length < 3) { document.getElementById('suggestions').classList.add('hidden'); return; }
+    debounceTimer = setTimeout(async () => {
+      try { showSuggestions(await geocode(q)); } catch (_) {}
+    }, 350);
+  });
+
+  document.getElementById('suburb-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSearch();
+  });
+
+  document.getElementById('search-btn').addEventListener('click', doSearch);
+
+  // ── Spoof / Reset ──────────────────────────────────────────────────────────
+  document.getElementById('spoof-btn').addEventListener('click', async () => {
+    if (lat === null) return;
+    const btn = document.getElementById('spoof-btn');
+    const msgEl = document.getElementById('spoof-msg');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Spoofing…';
+    msgEl.classList.add('hidden');
+    try {
+      const r = await fetch(`${API}/spoof`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat, lng }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        spoofActive = true;
+        setPill('spoof', 'active', `Spoofing: ${placeName.split(',')[0]}`);
+        msgEl.className = 'spoof-status success';
+        msgEl.textContent = `Location set to ${placeName}`;
+      } else {
+        msgEl.className = 'spoof-status error';
+        msgEl.textContent = d.message || 'Spoof failed — check device connection.';
+      }
+      msgEl.classList.remove('hidden');
+    } catch {
+      msgEl.className = 'spoof-status error';
+      msgEl.textContent = 'Could not reach the local server.';
+      msgEl.classList.remove('hidden');
+    } finally {
+      updateSpoofBtn();
+    }
+  });
+
+  document.getElementById('reset-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('reset-btn');
+    const msgEl = document.getElementById('spoof-msg');
+    btn.disabled = true;
+    btn.textContent = 'Resetting…';
+    msgEl.classList.add('hidden');
+    try {
+      const r = await fetch(`${API}/reset`, { method: 'POST' });
+      const d = await r.json();
+      spoofActive = false;
+      setPill('spoof', '', 'Spoofing: idle');
+      msgEl.className = 'spoof-status ' + (d.ok ? 'success' : 'error');
+      msgEl.textContent = d.ok ? 'Location reset to real GPS.' : (d.message || 'Reset failed.');
+      msgEl.classList.remove('hidden');
+    } catch {
+      msgEl.className = 'spoof-status error';
+      msgEl.textContent = 'Could not reach the local server.';
+      msgEl.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Reset GPS';
+      updateSpoofBtn();
+    }
+  });
+
+  // ── GPX ───────────────────────────────────────────────────────────────────
+  function buildGpx(latF, lngF, name) {
+    const safe = name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ios-gps-spoofer"\n  xmlns="http://www.topografix.com/GPX/1/1">\n  <wpt lat="${latF}" lon="${lngF}">\n    <name>${safe}</name>\n  </wpt>\n</gpx>`;
+  }
+
+  // ── Copy helpers ──────────────────────────────────────────────────────────
+  function copyText(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = orig, 1500);
+    });
+  }
+
+  document.getElementById('copy-coords-btn').addEventListener('click', () =>
+    copyText(`${lat.toFixed(6)}, ${lng.toFixed(6)}`, document.getElementById('copy-coords-btn')));
+
+  document.getElementById('copy-pymobile-btn').addEventListener('click', () =>
+    copyText(document.getElementById('cmd-pymobile').textContent, document.getElementById('copy-pymobile-btn')));
+
+  document.getElementById('copy-idevice-btn').addEventListener('click', () =>
+    copyText(document.getElementById('cmd-idevice').textContent, document.getElementById('copy-idevice-btn')));
+
+  document.getElementById('copy-gpx-btn').addEventListener('click', () =>
+    copyText(document.getElementById('gpx-preview').textContent, document.getElementById('copy-gpx-btn')));
+
+  document.getElementById('download-gpx-btn').addEventListener('click', () => {
+    const gpx  = buildGpx(lat.toFixed(6), lng.toFixed(6), placeName);
+    const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), {
+      href: url,
+      download: `${placeName.split(',')[0].trim().replace(/\s+/g,'_')}.gpx`
+    });
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+</script>
+</body>
+</html>
