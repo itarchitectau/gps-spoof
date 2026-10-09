@@ -18,10 +18,26 @@ index.html  ←─ fetch ─→  server.py (localhost:9876)  ←─ subprocess �
 - [pymobiledevice3](https://github.com/doronz88/pymobiledevice3)
 - iPhone trusted on the computer, connected via USB
 
-Install pymobiledevice3:
+### Windows — additional requirements
+
+**1. Microsoft C++ Build Tools** (required to compile pymobiledevice3's native extensions)
+
+1. Download from https://visualstudio.microsoft.com/visual-cpp-build-tools/
+2. Run the installer and select the **"Desktop development with C++"** workload
+3. Click Install (~5–6 GB), then restart your terminal
+
+**2. Apple Mobile Device Support** (required for USB device detection)
+
+Install either:
+- **iTunes** from https://www.apple.com/itunes/ — includes the USB driver, or
+- **Apple Devices** from the Microsoft Store — lighter alternative
+
+Without this, Windows will not recognise the iPhone over USB and pymobiledevice3 cannot detect it.
+
+### Install Python dependencies
 
 ```bash
-pip install pymobiledevice3
+pip install -r requirements.txt
 ```
 
 ## Quick start
