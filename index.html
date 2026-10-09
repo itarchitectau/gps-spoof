@@ -242,6 +242,19 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    .device-hint-bar {
+      max-width: 520px;
+      width: 100%;
+      background: #1c1410;
+      border: 1px solid #78350f;
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-size: 0.82rem;
+      color: #fcd34d;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
     .server-hint {
       margin-top: 24px;
       padding: 14px 16px;
@@ -281,6 +294,7 @@
     <span id="pill-spoof-text">Spoofing: idle</span>
   </div>
 </div>
+<div id="device-hint-bar" class="device-hint-bar hidden"></div>
 
 <div class="card">
 
@@ -381,20 +395,28 @@
 
   // ── Status polling ─────────────────────────────────────────────────────────
   async function pollStatus() {
+    const hintBar = document.getElementById('device-hint-bar');
     try {
       const r = await fetch(`${API}/status`, { signal: AbortSignal.timeout(3000) });
       const d = await r.json();
       serverOnline = true;
       deviceConnected = d.connected;
-      setPill('server', 'ok', `Server: online`);
+      setPill('server', 'ok', 'Server: online');
       setPill('device', d.connected ? 'ok' : 'bad',
         d.connected ? `Device: ${d.udid ? d.udid.slice(0,8)+'…' : 'connected'}` : 'Device: not found');
       document.getElementById('server-hint').classList.add('hidden');
+      if (d.connected) {
+        hintBar.classList.add('hidden');
+      } else if (d.hint) {
+        hintBar.textContent = '⚠ ' + d.hint;
+        hintBar.classList.remove('hidden');
+      }
     } catch {
       serverOnline = false;
       deviceConnected = false;
       setPill('server', 'bad', 'Server: offline');
       setPill('device', '',    'Device: —');
+      hintBar.classList.add('hidden');
       document.getElementById('server-hint').classList.remove('hidden');
     }
     updateSpoofBtn();

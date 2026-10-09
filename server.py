@@ -17,11 +17,12 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
 PORT = 9876
+IS_WINDOWS = platform.system() == "Windows"
 
 # Suppress console windows on Windows when spawning subprocesses.
 _SUBPROCESS_FLAGS = (
     {"creationflags": subprocess.CREATE_NO_WINDOW}
-    if platform.system() == "Windows"
+    if IS_WINDOWS
     else {}
 )
 
@@ -39,13 +40,24 @@ def _run(args, timeout=10):
 
 
 def _extract_json(text):
-    """Pull the first JSON array or object out of text.
+    """Pull the outermost JSON array or object out of text.
 
-    pymobiledevice3 sometimes emits log/progress lines before the JSON payload,
-    especially on Windows, so we can't parse stdout directly.
+    pymobiledevice3 sometimes emits log/progress lines before the JSON payload.
+    We scan for the first '[' or '{' and then find its matching bracket.
     """
-    match = re.search(r'(\[.*?\]|\{.*?\})', text, re.DOTALL)
-    return match.group(1) if match else None
+    for start_char, end_char in [("[", "]"), ("{", "}")]:
+        idx = text.find(start_char)
+        if idx == -1:
+            continue
+        depth = 0
+        for i, ch in enumerate(text[idx:], idx):
+            if ch == start_char:
+                depth += 1
+            elif ch == end_char:
+                depth -= 1
+                if depth == 0:
+                    return text[idx : i + 1]
+    return None
 
 
 def _parse_devices(text):
@@ -63,55 +75,93 @@ def _parse_devices(text):
 
 
 def _udid(device):
-    """Extract UDID from a device dict — key name varies across versions."""
+    """Extract UDID — key name varies across pymobiledevice3 versions."""
     for key in ("Identifier", "SerialNumber", "udid", "UDID"):
         if device.get(key):
             return device[key]
     return None
 
 
+def check_amds():
+    """Windows only: return status of the Apple Mobile Device Service."""
+    if not IS_WINDOWS:
+        return None
+    try:
+        r = subprocess.run(
+            ["sc", "query", "Apple Mobile Device Service"],
+            capture_output=True, text=True, timeout=5,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        if "RUNNING" in r.stdout:
+            return "running"
+        if "STOPPED" in r.stdout:
+            return "stopped"
+        return "not_found"
+    except Exception:
+        return "unknown"
+
+
 def check_device():
     """Return (connected: bool, udid: str | None, diagnostics: dict)."""
     diag = {}
-    try:
-        r = _run(["usbmux", "list"], timeout=5)
-        diag = {
-            "command": "usbmux list",
-            "returncode": r.returncode,
-            "stdout": r.stdout[:500],
-            "stderr": r.stderr[:500],
-        }
-        # Check stdout first, then stderr (output destination varies by version/OS)
-        devices = _parse_devices(r.stdout) or _parse_devices(r.stderr)
-        if devices:
-            return True, _udid(devices[0]), diag
-        # Non-zero exit or empty list — log and report not connected
-        if r.returncode != 0:
-            print(f"  [device check] returncode={r.returncode}")
-        if r.stderr.strip():
-            print(f"  [device check] stderr: {r.stderr.strip()[:200]}")
-        if r.stdout.strip():
-            print(f"  [device check] stdout: {r.stdout.strip()[:200]}")
-        return False, None, diag
-    except FileNotFoundError:
-        msg = "pymobiledevice3 not found — is it installed in this Python environment?"
-        print(f"  [device check] {msg}")
-        diag["error"] = msg
-        return False, None, diag
-    except Exception as exc:
-        print(f"  [device check] unexpected error: {exc}")
-        diag["error"] = str(exc)
-        return False, None, diag
+
+    # Try usbmux list first, then lockdown list as fallback.
+    for cmd in (["usbmux", "list"], ["lockdown", "list"]):
+        try:
+            r = _run(cmd, timeout=5)
+            diag[" ".join(cmd)] = {
+                "returncode": r.returncode,
+                "stdout": r.stdout[:800],
+                "stderr": r.stderr[:400],
+            }
+            devices = _parse_devices(r.stdout) or _parse_devices(r.stderr)
+            if devices:
+                return True, _udid(devices[0]), diag
+        except FileNotFoundError:
+            diag["error"] = "pymobiledevice3 not found — run: pip install pymobiledevice3"
+            return False, None, diag
+        except subprocess.TimeoutExpired:
+            diag[" ".join(cmd)] = {"error": "timed out"}
+        except Exception as exc:
+            diag[" ".join(cmd)] = {"error": str(exc)}
+
+    if IS_WINDOWS:
+        diag["amds"] = check_amds()
+
+    return False, None, diag
+
+
+def _device_hints(diag):
+    """Return a human-readable hint string based on diagnostics."""
+    if "error" in diag and "not found" in diag.get("error", ""):
+        return "pymobiledevice3 is not installed. Run: pip install pymobiledevice3"
+
+    amds = diag.get("amds")
+    if amds == "stopped":
+        return "Apple Mobile Device Service is installed but STOPPED. Open Services (services.msc) and start it."
+    if amds == "not_found":
+        return "Apple Mobile Device Support is not installed. Install iTunes or Apple Devices from the Microsoft Store."
+
+    # Look for clues in command output
+    for key in ("usbmux list", "lockdown list"):
+        entry = diag.get(key, {})
+        combined = entry.get("stdout", "") + entry.get("stderr", "")
+        if "trust" in combined.lower():
+            return "Your iPhone is asking to trust this computer. Tap 'Trust' on the device."
+        if "locked" in combined.lower():
+            return "Device is locked. Unlock your iPhone and try again."
+        if "permission" in combined.lower() or "access" in combined.lower():
+            return "Permission error. Try running the server as Administrator."
+
+    return "Plug in your iPhone via USB and tap 'Trust This Computer' if prompted."
 
 
 def set_location(lat, lng):
-    """Simulate GPS location on the connected device."""
     r = _run(["developer", "dvt", "simulate-location", "set", "--", str(lat), str(lng)])
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
 def reset_location():
-    """Restore real GPS on the connected device."""
     r = _run(["developer", "dvt", "simulate-location", "clear"])
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
@@ -148,13 +198,17 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
 
         if path == "/status":
-            connected, udid, _ = check_device()
-            self._send_json(200, {"connected": connected, "udid": udid})
+            connected, udid, diag = check_device()
+            hint = "" if connected else _device_hints(diag)
+            self._send_json(200, {"connected": connected, "udid": udid, "hint": hint})
 
         elif path == "/debug":
-            # Returns raw pymobiledevice3 output — useful for diagnosing detection issues.
             connected, udid, diag = check_device()
-            self._send_json(200, {"connected": connected, "udid": udid, "diagnostics": diag})
+            hint = "" if connected else _device_hints(diag)
+            self._send_json(200, {
+                "connected": connected, "udid": udid,
+                "hint": hint, "diagnostics": diag,
+            })
 
         else:
             self._send_json(404, {"error": "not found"})
@@ -181,11 +235,38 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": "not found"})
 
 
+def startup_diagnostics():
+    print(f"\n  GPS spoof server  http://127.0.0.1:{PORT}"
+          f"  [{platform.system()} / Python {sys.version.split()[0]}]")
+
+    if IS_WINDOWS:
+        amds = check_amds()
+        status_label = {"running": "RUNNING", "stopped": "STOPPED — start it in services.msc",
+                        "not_found": "NOT INSTALLED — install iTunes or Apple Devices",
+                        "unknown": "unknown"}.get(amds, amds)
+        print(f"  Apple Mobile Device Service: {status_label}")
+
+    print("  Checking for connected iOS device...")
+    connected, udid, diag = check_device()
+    if connected:
+        print(f"  Device found: {udid}")
+    else:
+        hint = _device_hints(diag)
+        print(f"  No device found. {hint}")
+        for cmd_key in ("usbmux list", "lockdown list"):
+            entry = diag.get(cmd_key, {})
+            if entry.get("stderr", "").strip():
+                print(f"  [{cmd_key}] stderr: {entry['stderr'].strip()[:200]}")
+            if entry.get("stdout", "").strip():
+                print(f"  [{cmd_key}] stdout: {entry['stdout'].strip()[:200]}")
+
+    print(f"\n  Open index.html in your browser.")
+    print(f"  Visit http://127.0.0.1:{PORT}/debug for full raw diagnostics.\n")
+
+
 if __name__ == "__main__":
+    startup_diagnostics()
     server = Server(("127.0.0.1", PORT), Handler)
-    print(f"\n  GPS spoof server  http://127.0.0.1:{PORT}  [{platform.system()} / Python {sys.version.split()[0]}]")
-    print("  Open index.html, plug in your iPhone, then search for a suburb.")
-    print("  Visit http://127.0.0.1:9876/debug for raw device detection output.\n")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
