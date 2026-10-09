@@ -17,6 +17,7 @@ index.html  ←─ fetch ─→  server.py (localhost:9876)  ←─ subprocess �
 - Python 3.9+
 - [pymobiledevice3](https://github.com/doronz88/pymobiledevice3)
 - iPhone trusted on the computer, connected via USB
+- **Developer Mode enabled on the iPhone** — Settings → Privacy & Security → Developer Mode → turn on (requires a reboot; only available on iOS 16+)
 
 ### Windows — additional requirements
 
@@ -86,12 +87,16 @@ If the server is not running, expand **Manual commands & GPX** in the UI for:
 
 ## iOS version notes
 
-| iOS version | Works with |
+| iOS version | Notes |
 |---|---|
-| iOS 16 and earlier | `simulate-location` via DVT (default) |
-| iOS 17+ | May require `pymobiledevice3 developer dvt` with a Developer Mode + mounted disk image |
+| iOS 16 | Developer Mode must be on; `simulate-location` via DVT |
+| iOS 17+ | Developer Mode must be on; developer disk image must be mounted |
 
-If spoofing fails on iOS 17+, run this first to mount the developer disk image:
+**Developer Mode** must be enabled on the device before spoofing will work:
+
+> Settings → Privacy & Security → Developer Mode → toggle on → reboot when prompted
+
+If spoofing fails on iOS 17+, mount the developer disk image first:
 
 ```bash
 python -m pymobiledevice3 mounter auto-mount
