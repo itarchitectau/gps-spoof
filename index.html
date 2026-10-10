@@ -496,7 +496,7 @@
     document.getElementById('map-frame').src =
       `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.05},${lat-0.05},${lng+0.05},${lat+0.05}&layer=mapnik&marker=${lat},${lng}`;
     document.getElementById('cmd-pymobile').textContent =
-      `python -m pymobiledevice3 developer dvt simulate-location --userspace set -- ${latF} ${lngF}`;
+      `python -m pymobiledevice3 developer dvt simulate-location set --userspace -- ${latF} ${lngF}`;
     document.getElementById('cmd-idevice').textContent =
       `idevicesetlocation ${latF} ${lngF}`;
     document.getElementById('gpx-preview').textContent = buildGpx(latF, lngF, placeName);

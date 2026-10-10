@@ -157,12 +157,12 @@ def _device_hints(diag):
 
 
 def set_location(lat, lng):
-    r = _run(["developer", "dvt", "simulate-location", "--userspace", "set", "--", str(lat), str(lng)])
+    r = _run(["developer", "dvt", "simulate-location", "set", "--userspace", "--", str(lat), str(lng)])
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
 def reset_location():
-    r = _run(["developer", "dvt", "simulate-location", "--userspace", "clear"])
+    r = _run(["developer", "dvt", "simulate-location", "clear", "--userspace"])
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
