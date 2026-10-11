@@ -593,10 +593,15 @@
     try {
       const r = await fetch(`${API}/reset`, { method: 'POST' });
       const d = await r.json();
-      spoofActive = false;
-      setPill('spoof', '', 'Spoofing: idle');
-      msgEl.className = 'spoof-status ' + (d.ok ? 'success' : 'error');
-      msgEl.textContent = d.ok ? 'Location reset to real GPS.' : (d.message || 'Reset failed.');
+      if (d.ok) {
+        spoofActive = false;
+        setPill('spoof', '', 'Spoofing: idle');
+        msgEl.className = 'spoof-status success';
+        msgEl.textContent = 'Location reset to real GPS.';
+      } else {
+        msgEl.className = 'spoof-status error';
+        msgEl.textContent = d.message || 'Reset failed — check device connection.';
+      }
       msgEl.classList.remove('hidden');
     } catch {
       msgEl.className = 'spoof-status error';

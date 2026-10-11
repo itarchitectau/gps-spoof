@@ -157,12 +157,12 @@ def _device_hints(diag):
 
 
 def set_location(lat, lng):
-    r = _run(["developer", "dvt", "simulate-location", "set", "--userspace", "--", str(lat), str(lng)])
+    r = _run(["developer", "dvt", "simulate-location", "set", "--userspace", "--", str(lat), str(lng)], timeout=30)
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
 def reset_location():
-    r = _run(["developer", "dvt", "simulate-location", "clear", "--userspace"])
+    r = _run(["developer", "dvt", "simulate-location", "clear", "--userspace"], timeout=30)
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
@@ -218,21 +218,27 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length)) if length else {}
 
-        if path == "/spoof":
-            lat = body.get("lat")
-            lng = body.get("lng")
-            if lat is None or lng is None:
-                self._send_json(400, {"error": "lat and lng are required"})
-                return
-            ok, msg = set_location(lat, lng)
-            self._send_json(200 if ok else 500, {"ok": ok, "message": msg})
+        try:
+            if path == "/spoof":
+                lat = body.get("lat")
+                lng = body.get("lng")
+                if lat is None or lng is None:
+                    self._send_json(400, {"error": "lat and lng are required"})
+                    return
+                ok, msg = set_location(lat, lng)
+                self._send_json(200 if ok else 500, {"ok": ok, "message": msg})
 
-        elif path == "/reset":
-            ok, msg = reset_location()
-            self._send_json(200 if ok else 500, {"ok": ok, "message": msg})
+            elif path == "/reset":
+                ok, msg = reset_location()
+                self._send_json(200 if ok else 500, {"ok": ok, "message": msg})
 
-        else:
-            self._send_json(404, {"error": "not found"})
+            else:
+                self._send_json(404, {"error": "not found"})
+
+        except subprocess.TimeoutExpired:
+            self._send_json(500, {"ok": False, "message": "Command timed out — device may be locked or unresponsive."})
+        except Exception as exc:
+            self._send_json(500, {"ok": False, "message": str(exc)})
 
 
 def startup_diagnostics():
